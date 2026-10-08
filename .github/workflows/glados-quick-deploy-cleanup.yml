@@ -1,0 +1,32 @@
+name: GLaDOS Quick Deploy Cleanup
+run-name: GLaDOS Quick Deploy Cleanup · ${{ inputs.deployment_id || github.event_name }}
+on:
+  schedule:
+    - cron: '43 19 * * *'
+  workflow_dispatch:
+    inputs:
+      deployment_id:
+        description: Idempotent cleanup request identifier
+        type: string
+        default: ''
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: glados-quick-deploy-cleanup
+  cancel-in-progress: false
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.11'
+      - name: Clean managed history older than 72 hours
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python .github/glados/cleanup.py

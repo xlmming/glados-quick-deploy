@@ -4,20 +4,17 @@ on:
     - cron: '23 3 1 * *'
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: glados-quick-deploy-keepalive
   cancel-in-progress: false
 jobs:
   keepalive:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
-    permissions:
-      contents: write
+    timeout-minutes: 5
     steps:
-      - name: Checkout deployment repository
-        uses: actions/checkout@v6
-      - name: Keep scheduled workflows active
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - name: Record repository activity
         env:
           BRANCH: ${{ github.event.repository.default_branch }}
         run: |
@@ -29,3 +26,4 @@ jobs:
           git commit -m 'chore: keep GLaDOS schedule active [skip ci]'
           git pull --rebase origin "$BRANCH"
           git push origin "HEAD:$BRANCH"
+          echo 'Repository activity timestamp saved; this does not refresh GLaDOS login.' >> "$GITHUB_STEP_SUMMARY"

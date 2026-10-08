@@ -6,224 +6,112 @@ on:
   workflow_dispatch:
     inputs:
       deployment_id:
-        description: Deployment verification identifier
-        required: false
+        description: Idempotent request identifier
         type: string
         default: ''
       account_key:
-        description: Verify only this anonymous account; empty runs all accounts
-        required: false
+        description: Anonymous account key; empty selects all enabled accounts
         type: string
         default: ''
+      operation:
+        description: checkin sends a check-in; status only reads account information
+        type: choice
+        options: [checkin, status]
+        default: checkin
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: glados-quick-deploy
   cancel-in-progress: false
+  queue: max
 jobs:
   prepare:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 10
     outputs:
-      matrix: ${{ steps.accounts.outputs.matrix }}
+      matrix: ${{ steps.select.outputs.matrix }}
+      has_accounts: ${{ steps.select.outputs.has_accounts }}
+      operation: ${{ steps.select.outputs.operation }}
     steps:
-      - name: Select accounts
-        id: accounts
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.11'
+      - name: Select accounts and read confirmed recent receipts
+        id: select
         env:
-          ALL_ACCOUNTS: '["B5B53A79298A3EA7","38BF42C9423DE42A","161BBB4B80D44D53","69DD5C3E76175F68","7F0647FA75E65402"]'
-          TARGET_ACCOUNT: ${{ inputs.account_key }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          python3 - <<'SELECT_ACCOUNTS'
-          import json, os, sys
-          accounts = json.loads(os.environ['ALL_ACCOUNTS'])
-          target = os.environ.get('TARGET_ACCOUNT', '')
-          if os.environ.get('EVENT_NAME') != 'schedule' and target:
-              if target not in accounts:
-                  print('Requested account is not configured.')
-                  sys.exit(1)
-              accounts = [target]
-          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
-              output.write('matrix=' + json.dumps({'account': accounts}) + '\n')
-          SELECT_ACCOUNTS
+          GH_TOKEN: ${{ github.token }}
+          GQD_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GQD_OPERATION: ${{ inputs.operation || 'checkin' }}
+          GQD_TARGET_ACCOUNT: ${{ inputs.account_key }}
+          GQD_SCHEDULE: ${{ github.event.schedule }}
+        run: python .github/glados/runner.py prepare
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: steps.select.outputs.has_accounts == 'true'
+        with:
+          name: gqd-history-${{ github.run_id }}-${{ github.run_attempt }}
+          path: gqd-history/history.json
+          retention-days: 3
+          if-no-files-found: error
   checkin:
     needs: prepare
+    if: needs.prepare.outputs.has_accounts == 'true'
     name: Account ${{ matrix.account }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       max-parallel: 1
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    env:
+      GQD_ACCOUNT_KEY: ${{ matrix.account }}
+      GQD_OPERATION: ${{ needs.prepare.outputs.operation }}
     steps:
-      - name: Read pinned upstream
-        uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Read verified upstream
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           repository: lankerr/2026-glados-checkin
           ref: b4ed1f9abeba4ef6244c0e7fd99333970b81d341
           path: upstream
           persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: '3.11'
-          cache: pip
-          cache-dependency-path: upstream/requirements.txt
       - name: Install upstream dependencies
-        run: python -m pip install -r upstream/requirements.txt
-      - name: Test upstream
-        working-directory: upstream
-        run: python -m unittest discover -s tests -v
-      - name: Check in
+        run: python -m pip install --disable-pip-version-check --no-cache-dir -r upstream/requirements.txt
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: gqd-history-${{ github.run_id }}-${{ github.run_attempt }}
+          path: gqd-history
+      - name: Prepare exact account operation
+        id: preflight
         env:
-          GLADOS_ACCOUNT_KEY: ${{ matrix.account }}
-          GLADOS_ACCOUNT_JSON: ${{ secrets[format('GLADOS_ACCOUNT_{0}', matrix.account)] }}
-          EXCHANGE_PLAN: 'plan500'
+          GQD_ACCOUNT_JSON: ${{ secrets[format('GLADOS_ACCOUNT_{0}', matrix.account)] }}
+        run: python .github/glados/runner.py preflight
+      - name: Save durable operation intent before side effects
+        if: steps.preflight.outputs.side_effects == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gqd-intent-${{ matrix.account }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: gqd-intent/receipt.json
+          retention-days: 3
+          if-no-files-found: error
+      - name: Check in or refresh account information
+        env:
+          GQD_ACCOUNT_JSON: ${{ secrets[format('GLADOS_ACCOUNT_{0}', matrix.account)] }}
           PYTHONIOENCODING: utf-8
-        run: |
-          python - <<'GLADOS_ADAPTER'
-          import contextlib
-          import importlib.util
-          import io
-          import json
-          import math
-          import os
-          import re
-          import sys
-          
-          RESULT_PREFIX = "QUICK_DEPLOY_RESULT="
-          key = os.environ.get("GLADOS_ACCOUNT_KEY", "")
-          if not re.fullmatch(r"[A-F0-9]{16}", key):
-              key = "UNKNOWN"
-          result = {"accountKey": key, "outcome": "failed", "message": "签到任务未完成。", "errorKind": "configuration", "exchange": "not_run"}
-          exit_code = 1
-          
-          def number(value):
-              try:
-                  parsed = float(value)
-                  return parsed if math.isfinite(parsed) and abs(parsed) <= 1000000000 else None
-              except (TypeError, ValueError, OverflowError):
-                  return None
-          
-          def auth_failure(response):
-              if not isinstance(response, dict):
-                  return False
-              message = str(response.get("message", "")).lower()
-              reason = str(response.get("reason", "")).lower()
-              return (response.get("code") == -2 or reason == "device-mismatch"
-                      or any(x in message for x in ("automated check-in detected", "没有权限", "unauthorized", "permission", "sign in again")))
-          
-          def run():
-              global result, exit_code
-              raw = json.loads(os.environ.get("GLADOS_ACCOUNT_JSON", ""))
-              if not isinstance(raw, dict):
-                  return
-              cookie = raw.get("cookie", "")
-              ua = raw.get("userAgent", "")
-              origin = raw.get("origin", "https://glados.cloud")
-              if not isinstance(cookie, str) or not isinstance(ua, str):
-                  return
-              if not 1 <= len(cookie) <= 32768 or not 1 <= len(ua) <= 2048:
-                  return
-              if not all(32 <= ord(ch) <= 126 for ch in cookie + ua) or origin != "https://glados.cloud":
-                  return
-              pairs = {}
-              for part in cookie.split(";"):
-                  name, separator, value = part.strip().partition("=")
-                  if separator:
-                      if name in ("gld:sess", "gld:sess.sig") and name in pairs:
-                          return
-                      pairs[name] = value
-              if not pairs.get("gld:sess") or not pairs.get("gld:sess.sig") or key == "UNKNOWN":
-                  return
-              plan = os.environ.get("EXCHANGE_PLAN", "off")
-              if plan not in ("off", "plan100", "plan200", "plan500"):
-                  return
-              os.environ["GLADOS_USER_AGENT"] = ua
-              spec = importlib.util.spec_from_file_location("glados_upstream", "upstream/checkin.py")
-              upstream = importlib.util.module_from_spec(spec)
-              spec.loader.exec_module(upstream)
-              upstream.DOMAINS = ["https://glados.cloud"]
-              upstream.log = lambda *args, **kwargs: None
-              # Record status codes only. Never retain request headers or exception text.
-              http_state = {"status": None}
-              def wrap_http(fn):
-                  def wrapped(*args, **kwargs):
-                      response = fn(*args, **kwargs)
-                      http_state["status"] = getattr(response, "status_code", None)
-                      return response
-                  return wrapped
-              if hasattr(upstream, "requests"):
-                  for method in ("get", "post"):
-                      original = getattr(upstream.requests, method, None)
-                      if callable(original):
-                          setattr(upstream.requests, method, wrap_http(original))
-              client = upstream.GLaDOS(cookie)
-              before = None
-              try:
-                  if client.get_points():
-                      before = number(client.points)
-              except Exception:
-                  pass
-              http_state["status"] = None
-              # Exactly one actual check-in. Login or device rejections are not retried.
-              response = client.checkin()
-              status = http_state["status"]
-              if auth_failure(response) or status in (401, 403):
-                  result.update(outcome="authentication_required", errorKind="authentication", message="登录授权被拒绝，请重新登录后更新。")
-                  return
-              if not upstream.is_normal_checkin_result(response):
-                  kind = "rate_limited" if status == 429 else ("request_failed" if response is None else "unexpected_response")
-                  result.update(errorKind=kind, message="服务端未确认签到成功；本次未兑换积分。")
-                  return
-              message = str(response.get("message", "")).lower() if isinstance(response, dict) else ""
-              repeated = "checkin repeats" in message or "already" in message or "try tomorrow" in message
-              result = {"accountKey": key, "outcome": "already_checked" if repeated else "checked", "message": "今日已签到。" if repeated else "服务端已接受签到；尚未核实新增积分。", "exchange": "disabled" if plan == "off" else "not_run"}
-              exit_code = 0
-              after = None
-              try:
-                  if client.get_points():
-                      after = number(client.points)
-              except Exception:
-                  pass
-              if before is not None and after is not None:
-                  delta = after - before
-                  if delta >= 0 and delta <= 1000000:
-                      result["pointsAdded"] = int(delta) if delta.is_integer() else delta
-                      if delta > 0:
-                          result["message"] = "签到已完成，观测到积分增加。"
-                      elif not repeated:
-                          result["message"] = "服务端已接受签到；本次未观测到新增积分。"
-              # Only an accepted or duplicate check-in can reach the exchange operation.
-              if plan != "off":
-                  if after is None:
-                      result["exchange"] = "points_unavailable"
-                  else:
-                      try:
-                          exchange_info = upstream.auto_exchange(client, plan)
-                          if str(exchange_info).startswith("🎁"):
-                              result["exchange"] = "completed"
-                          elif str(exchange_info).startswith("⏭️"):
-                              result["exchange"] = "not_needed"
-                          else:
-                              result["exchange"] = "failed"
-                              result["errorKind"] = "exchange"
-                              result["message"] = "签到已完成，但积分兑换未成功。"
-                              exit_code = 1
-                      except Exception:
-                          result["exchange"] = "failed"
-                          result["errorKind"] = "exchange"
-                          result["message"] = "签到已完成，但积分兑换未成功。"
-                          exit_code = 1
-          
-          try:
-              # All upstream output, including raw exceptions, stays private in this process.
-              with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-                  run()
-          except Exception:
-              if result.get("outcome") not in ("checked", "already_checked"):
-                  result.update(outcome="failed", errorKind="execution", message="签到执行失败；未输出登录信息或原始异常。")
-              exit_code = 1
-          print(RESULT_PREFIX + json.dumps(result, ensure_ascii=False, separators=(",", ":")))
-          sys.exit(exit_code)
-          GLADOS_ADAPTER
+        run: python .github/glados/runner.py run
+      - name: Publish anonymous receipt and encrypted details
+        if: always() && steps.preflight.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gqd-result-${{ matrix.account }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: gqd-output/
+          retention-days: 3
+          if-no-files-found: error

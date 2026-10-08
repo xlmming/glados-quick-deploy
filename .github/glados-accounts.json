@@ -1,25 +1,67 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "accounts": [
     {
-      "accountKey": "B5B53A79298A3EA7"
+      "accountKey": "B5B53A79298A3EA7",
+      "times": [
+        "09:30"
+      ],
+      "exchangePlan": "plan500",
+      "enabled": true
     },
     {
-      "accountKey": "38BF42C9423DE42A"
+      "accountKey": "38BF42C9423DE42A",
+      "times": [
+        "09:30"
+      ],
+      "exchangePlan": "plan500",
+      "enabled": true
     },
     {
-      "accountKey": "161BBB4B80D44D53"
+      "accountKey": "161BBB4B80D44D53",
+      "times": [
+        "09:30"
+      ],
+      "exchangePlan": "plan500",
+      "enabled": true
     },
     {
-      "accountKey": "69DD5C3E76175F68"
+      "accountKey": "69DD5C3E76175F68",
+      "times": [
+        "09:30"
+      ],
+      "exchangePlan": "plan500",
+      "enabled": true
     },
     {
-      "accountKey": "7F0647FA75E65402"
+      "accountKey": "7F0647FA75E65402",
+      "times": [
+        "09:30"
+      ],
+      "exchangePlan": "plan500",
+      "enabled": true
     }
   ],
   "exchangePlan": "plan500",
   "time": "09:30",
   "timezone": "Asia/Taipei",
   "upstreamRepository": "lankerr/2026-glados-checkin",
-  "upstreamSHA": "b4ed1f9abeba4ef6244c0e7fd99333970b81d341"
+  "upstreamSHA": "b4ed1f9abeba4ef6244c0e7fd99333970b81d341",
+  "appVersion": "1.2.0",
+  "defaults": {
+    "times": [
+      "09:30"
+    ],
+    "exchangePlan": "plan500"
+  },
+  "maintenance": {
+    "retentionDays": 3,
+    "cleanupTime": "03:43",
+    "cleanupEnabled": true,
+    "keepaliveEnabled": true
+  },
+  "reporting": {
+    "keyId": "1227e4e6bfc5ef76952f662d1cc63c1d",
+    "publicKey": "-----BEGIN PUBLIC KEY-----\nMIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEA3o2RQOnA15Oo7yGAVSIv\nkMRnkaM3MPwj3Cj2FrMb+2mrFKTyWmNueCJf15IbbGcJaN3Es8f6vGI1xj2Ozi4W\n5cXpRIiPy0CzxpYNtribFGRImvlQCsJLAcx7Nm/o9q11PaqFU2W/hUbmHyV5firS\nObD6Yvusg5bdawAxk96oSV7dl8gEiA4UGc6DsuDhzkFs6DSXJGMHIW9kIRhQUd2w\nsmk1uC6zpubonmqkCYyOV4SF4JKH8gRpx5fjOR3SYp2A9ID1SltIH1SBbca+WJE5\nwHB1jJ8o78MWmfubXZemzjArcQMixHi99WjFnf8F0Q7DkuruDQvPMaiwiYsQ3Mt2\nM8TPQYtRF9kxzXErnNftSvqC3HN6HZjn7RLKVkBJexj3TE7YFXGEJq/XyQmVRQua\nYFKg6TIXn8g2ylZTi/ymGRvXRcYF0/4FzfYxiaE8IO7U2LJe7eCkjMeUBmODKvRD\nKB7LjGBITF3/6beF+6eq7gav6XtG9gJZc2WpJjF1vGeJAgMBAAE=\n-----END PUBLIC KEY-----\n"
+  }
 }
