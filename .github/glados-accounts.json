@@ -3,9 +3,12 @@
   "accounts": [
     {
       "accountKey": "B5B53A79298A3EA7"
+    },
+    {
+      "accountKey": "38BF42C9423DE42A"
     }
   ],
-  "exchangePlan": "plan500",
+  "exchangePlan": "plan200",
   "time": "09:30",
   "timezone": "Asia/Taipei",
   "upstreamRepository": "lankerr/2026-glados-checkin",

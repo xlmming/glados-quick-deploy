@@ -30,7 +30,7 @@ jobs:
       - name: Select accounts
         id: accounts
         env:
-          ALL_ACCOUNTS: '["B5B53A79298A3EA7"]'
+          ALL_ACCOUNTS: '["B5B53A79298A3EA7","38BF42C9423DE42A"]'
           TARGET_ACCOUNT: ${{ inputs.account_key }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
@@ -78,7 +78,7 @@ jobs:
         env:
           GLADOS_ACCOUNT_KEY: ${{ matrix.account }}
           GLADOS_ACCOUNT_JSON: ${{ secrets[format('GLADOS_ACCOUNT_{0}', matrix.account)] }}
-          EXCHANGE_PLAN: 'plan500'
+          EXCHANGE_PLAN: 'plan200'
           PYTHONIOENCODING: utf-8
         run: |
           python - <<'GLADOS_ADAPTER'
