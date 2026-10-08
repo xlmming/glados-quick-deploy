@@ -30,7 +30,7 @@ jobs:
       - name: Select accounts
         id: accounts
         env:
-          ALL_ACCOUNTS: '["B5B53A79298A3EA7","38BF42C9423DE42A","161BBB4B80D44D53"]'
+          ALL_ACCOUNTS: '["B5B53A79298A3EA7","38BF42C9423DE42A","161BBB4B80D44D53","69DD5C3E76175F68"]'
           TARGET_ACCOUNT: ${{ inputs.account_key }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
