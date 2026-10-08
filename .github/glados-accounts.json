@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "accounts": [
+    {
+      "accountKey": "B5B53A79298A3EA7"
+    }
+  ],
+  "exchangePlan": "plan500",
+  "time": "09:30",
+  "timezone": "Asia/Taipei",
+  "upstreamRepository": "lankerr/2026-glados-checkin",
+  "upstreamSHA": "b4ed1f9abeba4ef6244c0e7fd99333970b81d341"
+}
