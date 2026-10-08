@@ -7,7 +7,7 @@
         "09:30"
       ],
       "exchangePlan": "plan500",
-      "enabled": true
+      "enabled": false
     },
     {
       "accountKey": "38BF42C9423DE42A",
